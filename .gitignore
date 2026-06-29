@@ -1,0 +1,11 @@
+bioloop_env/
+__pycache__/
+*.pyc
+
+data/*.bin
+data/eis_*.csv
+data/eis_last_scan.csv
+data/*.png
+
+*.log
+.env

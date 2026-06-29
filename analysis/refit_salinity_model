@@ -1,0 +1,196 @@
+from pathlib import Path
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
+
+
+# -------------------------
+# Settings
+# -------------------------
+
+Kcell = 0.641460767  # update if needed
+
+DATA_PATH = Path("data/calibration_points.csv")
+
+
+# -------------------------
+# Optional original seed data
+# -------------------------
+
+seed = pd.DataFrame({
+    "I_known": [0.01, 0.05, 0.10, 0.15, 0.20, 0.40, 0.60],
+    "Rs_mean": [500.0876667, 93.18496, 66.56909244, 37.43785,
+                35.82026, 27.92454, 25.92104],
+    "Rs_sd": [163.427, 11.17352126, 0.5159, 0.2452,
+              1.2210, 0.4128, 0.2106],
+    "source": "seed",
+})
+
+
+# -------------------------
+# Load BioLoop calibration data
+# -------------------------
+
+if DATA_PATH.exists():
+    live = pd.read_csv(DATA_PATH)
+    live["source"] = "bioloop"
+else:
+    live = pd.DataFrame(columns=["I_known", "Rs_mean", "Rs_sd", "source"])
+
+
+# combine seed + BioLoop accepted points
+df = pd.concat(
+    [
+        seed[["I_known", "Rs_mean", "Rs_sd", "source"]],
+        live[["I_known", "Rs_mean", "Rs_sd", "source"]],
+    ],
+    ignore_index=True,
+)
+
+df = df[df["I_known"] > 0].copy()
+
+
+# -------------------------
+# Optional: average repeated concentrations
+# -------------------------
+
+grouped = (
+    df.groupby("I_known", as_index=False)
+    .agg(
+        Rs_mean=("Rs_mean", "mean"),
+        Rs_sd=("Rs_mean", "std"),
+        n=("Rs_mean", "count"),
+    )
+)
+
+grouped["Rs_sd"] = grouped["Rs_sd"].fillna(0)
+
+
+# -------------------------
+# Convert to molar conductivity
+# -------------------------
+
+I = grouped["I_known"].to_numpy()
+Rs = grouped["Rs_mean"].to_numpy()
+
+kappa = Kcell / Rs
+Lambda_m = 1000 * kappa / I
+sqrt_I = np.sqrt(I)
+
+
+# -------------------------
+# Models
+# -------------------------
+
+def linear_model(x, a, b):
+    return a * x + b
+
+
+def quadratic_model(x, a, b, d):
+    return a * x**2 + b * x + d
+
+
+Lambda0_NaCl = 126.45
+K_NaCl = 60.0
+
+
+def fixed_kohlrausch_model(x):
+    return Lambda0_NaCl - K_NaCl * x
+
+
+def corrected_model(x, B):
+    return Lambda0_NaCl - K_NaCl * x + B * x**2
+
+
+popt_lin, _ = curve_fit(linear_model, sqrt_I, Lambda_m)
+popt_quad, _ = curve_fit(quadratic_model, sqrt_I, Lambda_m)
+popt_B, _ = curve_fit(corrected_model, sqrt_I, Lambda_m)
+
+B_fit = popt_B[0]
+
+
+print("\n=== Linear fit ===")
+print("a, b:", popt_lin)
+
+print("\n=== Loose quadratic fit ===")
+print("a, b, d:", popt_quad)
+print("Equivalent model:")
+print(f'EMPIRICAL_MODEL = {{')
+print(f'    "Lambda0": {popt_quad[2]:.10f},')
+print(f'    "K": {-popt_quad[1]:.10f},')
+print(f'    "B": {popt_quad[0]:.10f},')
+print(f'}}')
+
+print("\n=== Fixed Kohlrausch + fitted B ===")
+print("Lambda0:", Lambda0_NaCl)
+print("K:", K_NaCl)
+print("B:", B_fit)
+
+
+# -------------------------
+# Plot
+# -------------------------
+
+xplot = np.linspace(min(sqrt_I), max(sqrt_I), 300)
+
+plt.figure(figsize=(8, 5))
+
+plt.scatter(
+    sqrt_I,
+    Lambda_m,
+    label="Calibration data",
+)
+
+plt.plot(
+    xplot,
+    linear_model(xplot, *popt_lin),
+    linestyle="--",
+    label="Linear fit",
+)
+
+plt.plot(
+    xplot,
+    quadratic_model(xplot, *popt_quad),
+    label="Loose quadratic fit",
+)
+
+plt.plot(
+    xplot,
+    corrected_model(xplot, B_fit),
+    linestyle=":",
+    label="Fixed Λ0/K + fitted B",
+)
+
+plt.plot(
+    xplot,
+    fixed_kohlrausch_model(xplot),
+    linestyle="-.",
+    label="Fixed Kohlrausch reference",
+)
+
+plt.xlabel(r"$\sqrt{I}$  [$M^{1/2}$]")
+plt.ylabel(r"Molar conductivity $\Lambda_m$  [S cm$^2$/mol]")
+plt.title("BioLoop salinity model refit")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+
+Path("data").mkdir(exist_ok=True)
+plt.savefig("data/refit_salinity_models.png", dpi=300, bbox_inches="tight")
+plt.show()
+
+
+# -------------------------
+# Save processed table
+# -------------------------
+
+grouped["kappa_S_cm"] = kappa
+grouped["Lambda_m"] = Lambda_m
+grouped["sqrt_I"] = sqrt_I
+
+grouped.to_csv("data/refit_processed_points.csv", index=False)
+
+print("\nSaved:")
+print("data/refit_salinity_models.png")
+print("data/refit_processed_points.csv")
