@@ -41,7 +41,7 @@ EMPIRICAL_MODEL = {
 GROUNDED_MODEL = {
     "Lambda0": 126.45,   # S cm^2/mol
     "K": 60.0,
-    "B": -60.21253491,        # fitted correction
+    "B": 0,        # fitted correction
 }
 
 
