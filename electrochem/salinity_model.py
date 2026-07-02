@@ -10,6 +10,7 @@ from scipy.interpolate import interp1d
 
 from config.settings import GROUNDED_MODEL
 from electrochem.kcell_calibration import get_latest_kcell
+from scipy.optimize import minimize
 
 
 # ==========================
@@ -68,13 +69,24 @@ def load_calibration_points(path="data/calibration_points.csv"):
     cal = pd.read_csv(cal_path)
 
     if "accepted" in cal.columns:
-        cal = cal[cal["accepted"].astype(str).str.lower().isin(["true", "1", "yes"])]
+        accepted_col = cal["accepted"].astype(str).str.lower()
+
+        keep = (
+            accepted_col.isin(["true", "1", "yes"])
+            | cal["accepted"].isna()
+            | (accepted_col == "nan")
+            | (accepted_col == "")
+        )
+
+        cal = cal[keep]
 
     if len(cal) == 0:
         return cal
 
     if "Kcell_at_time" not in cal.columns:
         cal["Kcell_at_time"] = get_latest_kcell()
+    else:
+        cal["Kcell_at_time"] = cal["Kcell_at_time"].fillna(get_latest_kcell())
 
     cal["kappa_S_cm"] = cal["Kcell_at_time"] / cal["Rs_mean"]
     cal["Lambda_observed"] = 1000 * cal["kappa_S_cm"] / cal["I_known"]
@@ -90,7 +102,7 @@ def load_calibration_points(path="data/calibration_points.csv"):
     return cal
 
 
-def fit_accepted_calibration_curve(cal):
+def fit_accepted_calibration_curve(cal, I_min=0.0, I_max=0.6):
     if cal is None or len(cal) < 3:
         return None
 
@@ -100,22 +112,58 @@ def fit_accepted_calibration_curve(cal):
     x = cal["sqrt_I"].to_numpy(dtype=float)
     y = cal["Lambda_observed"].to_numpy(dtype=float)
 
-    # Fit Lambda = a*(sqrt(I))^2 + b*sqrt(I) + c
-    a, b, c = np.polyfit(x, y, 2)
+    # Initial unconstrained guess
+    p0 = np.polyfit(x, y, 2)  # a, b, c
+
+    x_check = np.linspace(np.sqrt(I_min), np.sqrt(I_max), 200)
+
+    def objective(params):
+        a, b, c = params
+        y_pred = a * x**2 + b * x + c
+        return np.sum((y - y_pred) ** 2)
+
+    # Constraint: dLambda/dx = 2*a*x + b <= 0
+    constraints = []
+
+    for x_i in x_check:
+        constraints.append({
+            "type": "ineq",
+            "fun": lambda params, x_i=x_i: -(2 * params[0] * x_i + params[1]),
+        })
+
+    result = minimize(
+        objective,
+        p0,
+        constraints=constraints,
+        method="SLSQP",
+    )
+
+    if result.success:
+        a, b, c = result.x
+        kind = "monotonic quadratic"
+    else:
+        # Still use quadratic, but mark warning
+        a, b, c = p0
+        kind = "unconstrained quadratic warning"
 
     def Lambda_from_I(I_M):
         x_eval = np.sqrt(I_M)
         return a * x_eval**2 + b * x_eval + c
 
+    x_final = np.linspace(np.sqrt(I_min), np.sqrt(I_max), 200)
+    slopes = 2 * a * x_final + b
+    monotonic = np.all(slopes <= 1e-8)
+
     return {
         "I": I,
-        "kind": "quadratic",
+        "kind": kind,
         "a": a,
         "b": b,
         "c": c,
         "Lambda0_fit": c,
         "K_fit": -b,
         "B_fit": a,
+        "monotonic": monotonic,
         "Lambda_from_I": Lambda_from_I,
     }
 
@@ -418,10 +466,10 @@ def plot_advanced_model_update(
         table_rows.extend(
             [
                 ["", ""],
-                ["Accepted fit", "2nd-degree polynomial"],
-                ["a", f"{fit['a']:.3f}"],
-                ["b", f"{fit['b']:.3f}"],
-                ["c", f"{fit['c']:.3f}"],
+                ["Accepted fit", fit["kind"]],
+                ["Λ0 fit", f"{fit['Lambda0_fit']:.3f}"],
+                ["K fit", f"{fit['K_fit']:.3f}"],
+                ["B fit", f"{fit['B_fit']:.3f}"],
                 ["Accepted points", str(len(cal))],
                 ["I range", f"{cal['I_known'].min():.3f}–{cal['I_known'].max():.3f} M"],
             ]

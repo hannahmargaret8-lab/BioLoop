@@ -28,9 +28,9 @@ run_salinity_demo(
 
     # required for known/calibrate
     # ignored for predict
-    expected_I = 0.6,
+    expected_I = 0.1,
 
-    sample_name = "NaCl_0.6M",
+    sample_name = "NaCl_0.1M",
 
     n_scans=3,
 )
