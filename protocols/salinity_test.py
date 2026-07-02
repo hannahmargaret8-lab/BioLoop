@@ -7,11 +7,13 @@ from electrochem.salinity_model import (
     plot_advanced_model_update,
 )
 from electrochem.calibration import save_calibration_point
-from electrochem.kcell_calibration import save_kcell_calibration
+
 from feedback.salinity_feedback import classify_salinity
 from feedback.fault_feedback import diagnose_fault
 from utils.logger import log_result
 from config.settings import CALIBRATION
+from electrochem.kcell_calibration import save_kcell_calibration, get_latest_kcell
+
 
 
 def run_salinity_demo(
@@ -120,8 +122,13 @@ def run_salinity_demo(
                 Rs_mean=Rs_mean,
                 Rs_sd=Rs_sd,
                 I_known=expected_I,
-                empirical_error=quality.get("empirical_error_percent"),
+                empirical_error=None,
                 grounded_error=quality.get("grounded_error_percent"),
+                sample_name=sample_name,
+                source="user_accepted",
+                recommendation=quality_recommendation,
+                accepted=True,
+                Kcell_at_time=get_latest_kcell(),
             )
             print("Calibration point saved.")
         else:

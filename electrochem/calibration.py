@@ -2,7 +2,12 @@
 
 from pathlib import Path
 from datetime import datetime
-import csv
+import pandas as pd
+
+from electrochem.kcell_calibration import get_latest_kcell
+
+
+CALIBRATION_FILE = Path("data/calibration_points.csv")
 
 
 def save_calibration_point(
@@ -11,48 +16,45 @@ def save_calibration_point(
     I_known,
     empirical_error=None,
     grounded_error=None,
-    path="data/calibration_points.csv",
-    source="manual",
+    sample_name=None,
+    source="user_accepted",
+    recommendation=None,
+    accepted=True,
+    Kcell_at_time=None,
 ):
-    """
-    Save accepted salinity calibration points.
-
-    These points update the empirical model.
-    The grounded model is only a reference.
-    """
-
     Path("data").mkdir(exist_ok=True)
 
-    file_exists = Path(path).exists()
+    if Kcell_at_time is None:
+        Kcell_at_time = get_latest_kcell()
 
-    with open(path, "a", newline="") as f:
+    new_row = {
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "sample_name": sample_name,
+        "I_known": I_known,
+        "Rs_mean": Rs_mean,
+        "Rs_sd": Rs_sd,
+        "Kcell_at_time": Kcell_at_time,
+        "empirical_error_percent": empirical_error,
+        "grounded_error_percent": grounded_error,
+        "recommendation": recommendation,
+        "accepted": accepted,
+        "source": source,
+    }
 
-        writer = csv.DictWriter(
-            f,
-            fieldnames=[
-                "timestamp",
-                "I_known",
-                "Rs_mean",
-                "Rs_sd",
-                "empirical_error_percent",
-                "grounded_error_percent",
-                "source",
-            ],
-        )
+    columns = list(new_row.keys())
 
-        if not file_exists:
-            writer.writeheader()
+    if CALIBRATION_FILE.exists():
+        df = pd.read_csv(CALIBRATION_FILE)
 
-        writer.writerow(
-            {
-                "timestamp": datetime.now().isoformat(
-                    timespec="seconds"
-                ),
-                "I_known": I_known,
-                "Rs_mean": Rs_mean,
-                "Rs_sd": Rs_sd,
-                "empirical_error_percent": empirical_error,
-                "grounded_error_percent": grounded_error,
-                "source": source,
-            }
-        )
+        for col in columns:
+            if col not in df.columns:
+                df[col] = None
+
+        df = df[columns]
+    else:
+        df = pd.DataFrame(columns=columns)
+
+    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+    df.to_csv(CALIBRATION_FILE, index=False)
+
+    return new_row

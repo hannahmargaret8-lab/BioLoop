@@ -1,6 +1,6 @@
 # electrochem/quality_gate.py
 
-from config.settings import EMPIRICAL_MODEL, GROUNDED_MODEL, QUALITY
+from config.settings import GROUNDED_MODEL, QUALITY
 from electrochem.salinity_model import (
     conductivity_from_Rs,
     molar_conductivity,
@@ -19,14 +19,16 @@ def evaluate_measurement(
     Rs_mean,
     Rs_sd,
     max_Rs_sd=QUALITY["max_Rs_sd"],
-    max_empirical_error_percent=QUALITY["max_empirical_error_percent"],
     max_grounded_drift_percent=QUALITY["max_grounded_drift_percent"],
 ):
-
     kappa = conductivity_from_Rs(Rs_mean)
 
     score = 0
     notes = []
+
+    Lambda_obs = None
+    Lambda_grounded = None
+    grounded_error_percent = None
 
     # --------------------------
     # 1. Signal repeatability
@@ -43,39 +45,15 @@ def evaluate_measurement(
         score -= 1
         notes.append("Rs SD high")
 
-
     # --------------------------
-    # 2. Empirical model check
+    # 2. Grounded reference check
     # --------------------------
 
     if I_expected is not None:
-
         Lambda_obs = molar_conductivity(
             kappa,
             I_expected,
         )
-
-        Lambda_empirical = corrected_kohlrausch(
-            I_expected,
-            model=EMPIRICAL_MODEL,
-        )
-
-        empirical_error_percent = percent_error(
-            Lambda_obs,
-            Lambda_empirical,
-        )
-
-        if abs(empirical_error_percent) <= max_empirical_error_percent:
-            score += 1
-            notes.append("Close to empirical model")
-
-        elif abs(empirical_error_percent) <= 2 * max_empirical_error_percent:
-            notes.append("Drifting from empirical model")
-
-        else:
-            score -= 1
-            notes.append("Far from empirical model")
-
 
         Lambda_grounded = corrected_kohlrausch(
             I_expected,
@@ -99,14 +77,7 @@ def evaluate_measurement(
             notes.append("Far from grounded reference")
 
     else:
-        Lambda_obs = None
-        Lambda_empirical = None
-        Lambda_grounded = None
-        empirical_error_percent = None
-        grounded_error_percent = None
-
-        notes.append("Unknown sample: skipped model residual checks")
-
+        notes.append("Unknown sample: skipped grounded reference check")
 
     # --------------------------
     # 3. Physical sanity
@@ -120,39 +91,26 @@ def evaluate_measurement(
         score -= 2
         notes.append("Unphysical value detected")
 
-
     # --------------------------
     # Decision
     # --------------------------
 
     if score >= 3:
         decision = "ACCEPT"
-
     elif score >= 1:
         decision = "REVIEW"
-
     else:
         decision = "REJECT"
-
 
     return {
         "decision": decision,
         "score": score,
-
         "I_expected_M": I_expected,
-
         "Rs_mean_ohm": Rs_mean,
         "Rs_sd_ohm": Rs_sd,
-
         "kappa_S_cm": kappa,
-
         "Lambda_observed": Lambda_obs,
-
-        "Lambda_empirical": Lambda_empirical,
-        "empirical_error_percent": empirical_error_percent,
-
         "Lambda_grounded": Lambda_grounded,
         "grounded_error_percent": grounded_error_percent,
-
         "notes": notes,
     }
