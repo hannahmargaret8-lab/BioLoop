@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import serial
+from serial.tools import list_ports
 
 
 SI = {
@@ -75,28 +76,102 @@ def parse_eis_packets(raw):
     return np.array(rows, dtype=float)
 
 
-EIS_SCRIPT = (
-    "e\n"
-    "var f\n"
-    "var r\n"
-    "var j\n"
-    "set_pgstat_chan 0\n"
-    "set_pgstat_mode 3\n"
-    "set_range ba 100u\n"
-    "set_autoranging ba 100p 10m\n"
-    "cell_on\n"
-    "wait 4\n"
-    "meas_loop_eis f r j 10m 100k 1 51 0m\n"
-    "pck_start\n"
-    "pck_add f\n"
-    "pck_add r\n"
-    "pck_add j\n"
-    "pck_end\n"
-    "endloop\n"
-    "on_finished:\n"
-    "cell_off\n"
-    "\n"
-)
+def methodscript_voltage(value_v):
+    """
+    Convert volts to a MethodSCRIPT millivolt value.
+
+    Examples:
+        0.0 V   -> 0m
+        0.010 V -> 10m
+        0.100 V -> 100m
+       -0.100 V -> -100m
+    """
+    millivolts = int(round(float(value_v) * 1000))
+    return f"{millivolts}m"
+
+
+def methodscript_frequency(value_hz):
+    """
+    Convert frequency in Hz to a MethodSCRIPT-compatible value.
+
+    Common examples:
+        100000 Hz -> 100k
+        1000 Hz   -> 1k
+        1 Hz      -> 1
+        0.1 Hz    -> 100m
+        0.01 Hz   -> 10m
+    """
+    value_hz = float(value_hz)
+
+    if value_hz <= 0:
+        raise ValueError("Frequency must be greater than zero.")
+
+    if value_hz >= 1000 and value_hz % 1000 == 0:
+        return f"{value_hz / 1000:g}k"
+
+    if value_hz < 1:
+        return f"{value_hz * 1000:g}m"
+
+    return f"{value_hz:g}"
+
+
+def build_eis_script(
+    dc_bias_v=0.0,
+    ac_amplitude_v=0.010,
+    max_frequency_hz=200000,
+    min_frequency_hz=0.1,
+    n_points=61,
+):
+    if ac_amplitude_v <= 0:
+        raise ValueError("AC amplitude must be greater than zero.")
+
+    if min_frequency_hz <= 0:
+        raise ValueError("Minimum frequency must be greater than zero.")
+
+    if max_frequency_hz <= min_frequency_hz:
+        raise ValueError(
+            "Maximum frequency must be greater than minimum frequency."
+        )
+
+    if int(n_points) < 2:
+        raise ValueError("EIS requires at least two frequency points.")
+
+    ac_value = methodscript_voltage(ac_amplitude_v)
+    dc_value = methodscript_voltage(dc_bias_v)
+    max_frequency = methodscript_frequency(max_frequency_hz)
+    min_frequency = methodscript_frequency(min_frequency_hz)
+
+    return (
+        "e\n"
+        "var f\n"
+        "var r\n"
+        "var j\n"
+        "set_pgstat_chan 0\n"
+        "set_pgstat_mode 3\n"
+        "set_range ba 100u\n"
+        "set_autoranging ba 100p 10m\n"
+        "cell_on\n"
+        "wait 4\n"
+        f"meas_loop_eis f r j "
+        f"{ac_value} "
+        f"{max_frequency} "
+        f"{min_frequency} "
+        f"{int(n_points)} "
+        f"{dc_value}\n"
+        "pck_start\n"
+        "pck_add f\n"
+        "pck_add r\n"
+        "pck_add j\n"
+        "pck_end\n"
+        "endloop\n"
+        "on_finished:\n"
+        "cell_off\n"
+        "\n"
+    )
+
+
+# Preserve the old name for compatibility or direct debugging.
+EIS_SCRIPT = build_eis_script()
 
 
 def estimate_rs(zreal):
@@ -151,7 +226,62 @@ def plot_eis(csv_file, out_dir="data"):
     plt.grid(True, which="both")
     plt.savefig(out / "bode_phase.png", dpi=300, bbox_inches="tight")
     plt.close()
+EMSTAT_VID = 0x300A
+EMSTAT_PID = 0x2003
 
+
+def find_emstat_port():
+    """
+    Find the connected EmStat4X by USB vendor and product ID.
+
+    Returns:
+        Device path such as /dev/ttyUSB0.
+
+    Raises:
+        RuntimeError if no matching EmStat is found.
+    """
+    ports = list(list_ports.comports())
+
+    matches = [
+        port
+        for port in ports
+        if port.vid == EMSTAT_VID
+        and port.pid == EMSTAT_PID
+    ]
+
+    if not matches:
+        detected = "\n".join(
+            (
+                f"  {port.device}: "
+                f"VID={port.vid!r}, PID={port.pid!r}, "
+                f"description={port.description}"
+            )
+            for port in ports
+        )
+
+        if not detected:
+            detected = "  No serial ports detected."
+
+        raise RuntimeError(
+            "EmStat4X was not found.\n"
+            f"Expected VID:PID "
+            f"{EMSTAT_VID:04x}:{EMSTAT_PID:04x}.\n"
+            "Detected serial ports:\n"
+            f"{detected}"
+        )
+
+    if len(matches) > 1:
+        devices = ", ".join(
+            port.device
+            for port in matches
+        )
+
+        raise RuntimeError(
+            "Multiple EmStat devices were detected: "
+            f"{devices}. Pass the desired port explicitly."
+        )
+
+    return matches[0].device
 
 class EmStat4X:
     def __init__(self, port="/dev/ttyUSB0"):
@@ -167,14 +297,17 @@ class EmStat4X:
         time.sleep(1)
         return self.dev.read(1000)
 
-    def run_eis_raw(self):
+    def run_eis_raw(self, script=None, timeout_seconds=600):
+        if script is None:
+            script = EIS_SCRIPT
+
         self.dev.reset_input_buffer()
-        self.dev.write(EIS_SCRIPT.encode())
+        self.dev.write(script.encode())
 
         chunks = []
         start = time.time()
 
-        while time.time() - start < 75:
+        while time.time() - start < timeout_seconds:
             data = self.dev.read(4096)
 
             if data:
@@ -191,7 +324,7 @@ class EmStat4X:
 
 
 class PalmSens:
-    def __init__(self, port="/dev/ttyUSB0", simulate=False):
+    def __init__(self, port=None, simulate=False):
         self.port = port
         self.simulate = simulate
         self.connected = False
@@ -202,17 +335,50 @@ class PalmSens:
             print("PalmSens simulation mode")
             self.connected = True
             return
+        
+        if self.port is None:
+            print("Searching for EmStat4X...")
+            self.port = find_emstat_port()
 
-        print("Connecting to EmStat4X...")
+        print(f"Connecting to EmStat4X on {self.port}...")
         self.device = EmStat4X(self.port)
-        print(self.device.check_connection())
+        response = self.device.check_connection()
+        print(response)
+        if b"tes4" not in response:
+            self.device.close()
+            self.device = None
+
+            raise RuntimeError(
+                f"A serial device was found at {self.port}, "
+                "but it did not return the expected EmStat4X "
+                "identification response."
+            )
+
         self.connected = True
 
-    def run_scan(self, metadata=None):
+    def run_scan(
+        self,
+        metadata=None,
+        dc_bias_v=0.0,
+        measurement_mode="ocp",
+        ac_amplitude_v=0.010,
+        max_frequency_hz=200000,
+        min_frequency_hz=0.1,
+        n_points=61,
+        timeout_seconds=600,
+    ):
         import pandas as pd
 
         if metadata is None:
             metadata = {}
+        metadata = metadata.copy()
+
+        metadata["dc_bias_v"] = dc_bias_v
+        metadata["measurement_mode"] = measurement_mode
+        metadata["ac_amplitude_v"] = ac_amplitude_v
+        metadata["max_frequency_hz"] = max_frequency_hz
+        metadata["min_frequency_hz"] = min_frequency_hz
+        metadata["n_points"] = n_points
 
         mode = safe_name(metadata.get("mode", "unknown"))
         sample_name = safe_name(metadata.get("sample_name", "sample"))
@@ -226,8 +392,19 @@ class PalmSens:
             return self.simulate_scan()
 
         print("Running real EIS scan")
+        script = build_eis_script(
+            dc_bias_v=dc_bias_v,
+            ac_amplitude_v=ac_amplitude_v,
+            max_frequency_hz=max_frequency_hz,
+            min_frequency_hz=min_frequency_hz,
+            n_points=n_points,
+        )
 
-        raw = self.device.run_eis_raw()
+        raw = self.device.run_eis_raw(
+            script=script,
+            timeout_seconds=timeout_seconds,
+        )
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         Path("data").mkdir(exist_ok=True)
@@ -261,6 +438,14 @@ class PalmSens:
                 "predicted_I": predicted_I,
                 "scan_index": metadata.get("scan_index"),
                 "n_scans": metadata.get("n_scans"),
+
+                # New, backward-compatible metadata columns
+                "measurement_mode": measurement_mode,
+                "dc_bias_V": dc_bias_v,
+                "ac_amplitude_V": ac_amplitude_v,
+                "max_frequency_Hz": max_frequency_hz,
+                "min_frequency_Hz": min_frequency_hz,
+                "requested_n_points": n_points,
             }
         )
 
@@ -281,7 +466,18 @@ class PalmSens:
     def simulate_scan(self):
         return float(np.random.normal(loc=36.7, scale=0.2))
 
-    def run_batch(self, n_scans=3, metadata=None):
+    def run_batch(
+        self,
+        n_scans=3,
+        metadata=None,
+        dc_bias_v=0.0,
+        measurement_mode="ocp",
+        ac_amplitude_v=0.010,
+        max_frequency_hz=200000,
+        min_frequency_hz=0.10,
+        n_points=61,
+        timeout_seconds=600,
+    ):
         if metadata is None:
             metadata = {}
 
@@ -291,16 +487,43 @@ class PalmSens:
             scan_metadata = metadata.copy()
             scan_metadata["scan_index"] = i + 1
             scan_metadata["n_scans"] = n_scans
+            scan_metadata["dc_bias_v"] = dc_bias_v
+            scan_metadata["measurement_mode"] = measurement_mode
 
             print(f"Running EIS scan {i + 1}/{n_scans}")
-            results.append(self.run_scan(metadata=scan_metadata))
 
-        results = np.array(results)
+            result = self.run_scan(
+                metadata=scan_metadata,
+                dc_bias_v=dc_bias_v,
+                measurement_mode=measurement_mode,
+                ac_amplitude_v=ac_amplitude_v,
+                max_frequency_hz=max_frequency_hz,
+                min_frequency_hz=min_frequency_hz,
+                n_points=n_points,
+                timeout_seconds=timeout_seconds,
+            )
+
+            results.append(result)
+
+        results = np.array(results, dtype=float)
 
         return {
+            # Existing keys — do not rename or remove.
             "Rs_values": results.tolist(),
             "Rs_mean": float(np.mean(results)),
-            "Rs_sd": float(np.std(results, ddof=1)) if len(results) > 1 else 0.0,
+            "Rs_sd": (
+                float(np.std(results, ddof=1))
+                if len(results) > 1
+                else 0.0
+            ),
+
+            # New descriptive keys.
+            "measurement_mode": measurement_mode,
+            "dc_bias_v": dc_bias_v,
+            "ac_amplitude_v": ac_amplitude_v,
+            "max_frequency_hz": max_frequency_hz,
+            "min_frequency_hz": min_frequency_hz,
+            "n_points": int(n_points),
         }
 
 

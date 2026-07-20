@@ -63,7 +63,19 @@ def run_salinity_demo(
         predicted_I = None
 
     elif mode == "predict":
-        I_value = solve_I_from_Rs(Rs_mean)
+        try:
+            I_value = solve_I_from_Rs(Rs_mean)
+            prediction_valid = True
+            prediction_note = ""
+
+        except ValueError as exc:
+            I_value = float("nan")
+            prediction_valid = False
+            prediction_note = str(exc)
+
+            print("\nSalinity prediction unavailable.")
+            print("The measured Rs is outside the calibrated model range.")
+            print(prediction_note)
         predicted_I = I_value
 
     elif mode == "calibrate":

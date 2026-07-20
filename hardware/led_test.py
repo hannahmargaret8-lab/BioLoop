@@ -14,7 +14,7 @@ for p in pins:
     led.direction = Direction.OUTPUT
     print(f"Testing MCP pin {p}")
     led.value = True
-    time.sleep(1)
+    time.sleep(10)
     led.value = False
     time.sleep(0.3)
 

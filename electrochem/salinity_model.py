@@ -298,7 +298,7 @@ def plot_advanced_model_update(
     cal = load_calibration_points()
     fit = fit_accepted_calibration_curve(cal)
 
-    I_grid = np.linspace(0.03, 0.70, 300)
+    I_grid = np.linspace(0.01, 0.60, 300)
     x_grid = np.sqrt(I_grid)
 
     Lambda_grounded = corrected_kohlrausch(
@@ -478,7 +478,7 @@ def plot_advanced_model_update(
     table = ax_table.table(
         cellText=table_rows,
         colLabels=["Metric", "Value"],
-        loc="center",
+        loc="lower center",
         cellLoc="left",
     )
 
@@ -486,7 +486,7 @@ def plot_advanced_model_update(
     table.set_fontsize(8)
     table.scale(1.0, 1.25)
 
-    ax_table.set_title("Run summary")
+    ax_table.set_title("Run summary", fontsize=14, pad=8,)
 
     out_path = Path(f"data/model_update_{timestamp}.png")
     latest_path = Path("data/model_update.png")

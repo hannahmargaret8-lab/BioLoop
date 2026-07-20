@@ -24,13 +24,14 @@ run_salinity_demo(
     # "calibrate"  → add accepted point to empirical model
     # "kcell"      → recalibrate electrode cell constant
 
-    mode="calibrate",
+    mode="predict",
 
     # required for known/calibrate
     # ignored for predict
-    expected_I = 0.1,
+    expected_I = 0.18,
 
-    sample_name = "NaCl_0.1M",
+
+    sample_name = "0.18M_PBS",
 
     n_scans=3,
 )

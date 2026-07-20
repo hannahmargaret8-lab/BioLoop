@@ -1,11 +1,7 @@
+data/
+data_backup_*.tar.gz
 bioloop_env/
+.venv/
 __pycache__/
 *.pyc
-
-data/*.bin
-data/eis_*.csv
-data/eis_last_scan.csv
-data/*.png
-
-*.log
-.env
+.vscode/
