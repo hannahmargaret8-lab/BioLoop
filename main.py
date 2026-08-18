@@ -1,40 +1,33 @@
-# main.py
+# main.py - master CLI for BioLoop
 
+import argparse
 from initialize import initialize_bioloop
 from protocols.salinity_test import run_salinity_demo
 
 
-# =========================
-# Start BioLoop
-# =========================
+def main():
+    parser = argparse.ArgumentParser(description="Run BioLoop workflows")
+    parser.add_argument("--simulate", action="store_true", help="Run in simulation mode (no hardware)")
+    parser.add_argument("--mode", default="predict", help="Mode for salinity demo: known,predict,calibrate,kcell")
+    parser.add_argument("--expected-i", type=float, default=None, help="Expected I for known/calibrate modes")
+    parser.add_argument("--sample-name", default=None, help="Sample name for logging")
+    parser.add_argument("--n-scans", type=int, default=3, help="Number of EIS scans per batch")
 
-system = initialize_bioloop()
+    args = parser.parse_args()
 
+    system = initialize_bioloop()
 
-# =========================
-# Select operating mode
-# =========================
+    run_salinity_demo(
+        system=system,
+        mode=args.mode,
+        expected_I=args.expected_i,
+        n_scans=args.n_scans,
+        sample_name=args.sample_name,
+        simulate=args.simulate,
+    )
 
-run_salinity_demo(
-    system=system,
-
-    # Options:yy
-    # "known"      → validate known sample
-    # "predict"    → unknown sample, predict ionic strength
-    # "calibrate"  → add accepted point to empirical model
-    # "kcell"      → recalibrate electrode cell constant
-
-    mode="predict",
-
-    # required for known/calibrate
-    # ignored for predict
-    expected_I = 0.18,
+    print("BioLoop run complete")
 
 
-    sample_name = "0.18M_PBS",
-
-    n_scans=3,
-)
-
-
-print("BioLoop run complete")
+if __name__ == "__main__":
+    main()

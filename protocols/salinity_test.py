@@ -22,6 +22,7 @@ def run_salinity_demo(
     expected_I=None,
     n_scans=3,
     sample_name=None,
+    simulate=False,
 ):
     valves = system["valves"]
     leds = system["leds"]
@@ -39,7 +40,7 @@ def run_salinity_demo(
         else:
             sample_name = "sample"
 
-    pot = PalmSens()
+    pot = PalmSens(simulate=simulate)
     pot.connect()
 
     run_metadata = {
