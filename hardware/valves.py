@@ -18,7 +18,16 @@ class ValveController:
             return VALVES[valve]
         return valve
 
-    def __init__(self):
+    def __init__(self, simulate=False):
+        # Force simulation if requested
+        if simulate:
+            print("ValveController: simulation mode (forced)")
+            self.valves = {}
+            self._simulate = True
+            return
+
+        self._simulate = False
+
         if HARDWARE:
             i2c = busio.I2C(board.SCL, board.SDA)
             self.mcp = MCP23017(i2c, address=0x21)
@@ -45,6 +54,7 @@ class ValveController:
         else:
             print("Simulation mode: no MCP23017 detected")
             self.valves = {}
+            self._simulate = True
 
     def open(self, valve):
         valve = self._resolve_valve(valve)

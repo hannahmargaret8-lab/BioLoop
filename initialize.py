@@ -11,7 +11,7 @@ from config.settings import (
 from electrochem.kcell_calibration import get_latest_kcell
 
 
-def initialize_bioloop():
+def initialize_bioloop(simulate=False):
 
     print("======================")
     print("Starting BioLoop")
@@ -23,11 +23,11 @@ def initialize_bioloop():
     # -----------------------
 
     print("Checking valve controller...")
-    valves = ValveController()
+    valves = ValveController(simulate=simulate)
 
 
     print("Checking LED controller...")
-    leds = LEDController()
+    leds = LEDController(simulate=simulate)
 
 
     # -----------------------

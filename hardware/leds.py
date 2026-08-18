@@ -13,7 +13,16 @@ except ImportError:
 
 
 class LEDController:
-    def __init__(self):
+    def __init__(self, simulate=False):
+        if simulate:
+            print("LEDController: simulation mode (forced)")
+            self.salinity_leds = {}
+            self.fault_red = None
+            self._simulate = True
+            return
+
+        self._simulate = False
+
         if HARDWARE:
             i2c = busio.I2C(board.SCL, board.SDA)
             self.mcp = MCP23017(i2c, address=0x21)
@@ -36,6 +45,7 @@ class LEDController:
             print("LED simulation mode")
             self.salinity_leds = {}
             self.fault_red = None
+            self._simulate = True
 
     def salinity_off(self):
         if HARDWARE:

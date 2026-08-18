@@ -15,7 +15,7 @@ def main():
 
     args = parser.parse_args()
 
-    system = initialize_bioloop()
+    system = initialize_bioloop(simulate=args.simulate)
 
     run_salinity_demo(
         system=system,
