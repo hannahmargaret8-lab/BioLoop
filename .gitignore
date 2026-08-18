@@ -1,5 +1,7 @@
 data/
 data_backup_*.tar.gz
+today_backup*.tar.gz
+*.tar.gz
 bioloop_env/
 .venv/
 __pycache__/
