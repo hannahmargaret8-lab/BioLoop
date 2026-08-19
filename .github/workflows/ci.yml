@@ -22,8 +22,9 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          # Install a small set of scientific libs needed by tests (avoid full hardware deps)
+          pip install numpy pandas matplotlib scipy pyserial pyyaml
 
       - name: Run static checks
         run: python -m compileall .
