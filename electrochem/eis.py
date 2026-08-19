@@ -5,8 +5,16 @@ import time
 from pathlib import Path
 
 import numpy as np
-import serial
-from serial.tools import list_ports
+
+# Optional dependency: pyserial. Not required for simulation mode.
+try:
+    import serial
+    from serial.tools import list_ports
+    _HAS_SERIAL = True
+except Exception:
+    serial = None
+    list_ports = lambda: []
+    _HAS_SERIAL = False
 
 
 SI = {
@@ -285,6 +293,8 @@ def find_emstat_port():
 
 class EmStat4X:
     def __init__(self, port="/dev/ttyUSB0"):
+        if not _HAS_SERIAL:
+            raise RuntimeError("pyserial is required to use EmStat4X hardware interface")
         self.dev = serial.Serial(
             port,
             baudrate=921600,
@@ -326,9 +336,16 @@ class EmStat4X:
 class PalmSens:
     def __init__(self, port=None, simulate=False):
         self.port = port
+        # simulate may be: False, True (random), or 'deterministic'
         self.simulate = simulate
         self.connected = False
         self.device = None
+
+        # deterministic RNG for reproducible simulation
+        self._deterministic_rng = None
+        if simulate == 'deterministic':
+            # use a reproducible RandomState separate from global numpy RNG
+            self._deterministic_rng = np.random.RandomState(0)
 
     def connect(self):
         if self.simulate:
@@ -464,6 +481,8 @@ class PalmSens:
         return rs
 
     def simulate_scan(self):
+        if self._deterministic_rng is not None:
+            return float(self._deterministic_rng.normal(loc=36.7, scale=0.2))
         return float(np.random.normal(loc=36.7, scale=0.2))
 
     def run_batch(

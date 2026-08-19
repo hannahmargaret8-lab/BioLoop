@@ -1,0 +1,4 @@
+# Example playback configuration - list CSV files to cycle through
+files:
+  - simulator/canned/eis_example_1.csv
+  - simulator/canned/eis_example_2.csv
