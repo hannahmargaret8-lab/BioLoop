@@ -334,10 +334,11 @@ class EmStat4X:
 
 
 class PalmSens:
-    def __init__(self, port=None, simulate=False):
+    def __init__(self, port=None, simulate=False, playback=None):
         self.port = port
-        # simulate may be: False, True (random), or 'deterministic'
+        # simulate may be: False, 'random', 'deterministic', or 'playback'
         self.simulate = simulate
+        self.playback = playback
         self.connected = False
         self.device = None
 
@@ -347,8 +348,22 @@ class PalmSens:
             # use a reproducible RandomState separate from global numpy RNG
             self._deterministic_rng = np.random.RandomState(0)
 
+        # playback simulator is optional; if provided and simulate == 'playback' it will be used
+        if simulate == 'playback' and playback is not None:
+            try:
+                from simulator.playback import PlaybackSimulator
+
+                if isinstance(playback, PlaybackSimulator):
+                    self._playback = playback
+                else:
+                    self._playback = PlaybackSimulator(playback)
+            except Exception:
+                self._playback = None
+        else:
+            self._playback = None
+
     def connect(self):
-        if self.simulate:
+        if self.simulate and self.simulate != 'none':
             print("PalmSens simulation mode")
             self.connected = True
             return
@@ -406,6 +421,12 @@ class PalmSens:
             raise RuntimeError("PalmSens not connected")
 
         if self.simulate:
+            # playback mode: use canned EIS files if available
+            if self.simulate == 'playback' and self._playback is not None:
+                # return a single RS value for this scan using playback simulator
+                rs = self._playback.next_rs()
+                return rs
+
             return self.simulate_scan()
 
         print("Running real EIS scan")

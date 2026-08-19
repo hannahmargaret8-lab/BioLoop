@@ -1,5 +1,6 @@
 # initialize.py
 
+from pathlib import Path
 from hardware.valves import ValveController
 from hardware.leds import LEDController
 
