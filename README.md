@@ -4,7 +4,7 @@ BioLoop is a prototype research platform for automated electrochemical monitorin
 
 The broader BioLoop concept follows a sensor → controller → fluidics → biology → sensor architecture, with the long-term goal of enabling continuous, multiparametric biofilm characterization and adaptive experimental control.
 
-   Research status: BioLoop is experimental research software developed as part of an undergraduate            research project. Individual subsystems and experimental workflows were tested during development, but      the complete platform should not be considered a fully validated laboratory instrument.
+Research status: BioLoop is experimental research software developed as part of an undergraduate research project. Individual subsystems and experimental workflows were tested during development; the complete platform should not be considered a fully validated laboratory instrument.
 
 ## Project Overview
 
@@ -49,9 +49,9 @@ The software is organized modularly so that sensing, hardware control, experimen
    pip install -r requirements.txt
    ```
 
-3. Run a demo:
+3. Run a demo (recommended for reviewers without lab hardware):
    ```bash
-   python main.py
+   python main.py --simulate-mode deterministic --mode predict
    ```
 
 4. Adjust the mode or sample settings in `main.py` as needed for your experiment.

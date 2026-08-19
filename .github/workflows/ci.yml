@@ -31,8 +31,8 @@ jobs:
 
       - name: Lint (flake8 + black)
         run: |
-          flake8 || true
-          black --check . || true
+          flake8
+          black --check .
 
       - name: Run tests
         run: pytest -q

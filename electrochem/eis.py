@@ -426,7 +426,7 @@ class PalmSens:
                 # advance playback and copy the underlying CSV into data/
                 rs = self._playback.next_rs()
                 src = self._playback.files[(self._playback.index - 1) % len(self._playback.files)]
-                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
                 csv_file = f"data/eis_{mode}_{sample_name}_{ts}.csv"
                 try:
                     import shutil
@@ -456,7 +456,7 @@ class PalmSens:
 
             # non-playback simulate: synthesize frequency sweep and CSV like a real run
             rs = self.simulate_scan()
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
             freqs = np.logspace(np.log10(min_frequency_hz), np.log10(max_frequency_hz), num=n_points)
             zr = np.full_like(freqs, rs, dtype=float)
             zi = -0.1 * np.sqrt(freqs) - 1.0
@@ -506,7 +506,7 @@ class PalmSens:
             timeout_seconds=timeout_seconds,
         )
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
 
         Path("data").mkdir(exist_ok=True)
 
