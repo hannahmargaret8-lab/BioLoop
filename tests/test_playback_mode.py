@@ -9,4 +9,5 @@ def test_playback_main_runs():
 
     data_dir = Path("data")
     assert data_dir.exists()
-    assert any(data_dir.glob("eis_*.csv")) or True
+    eis_files = list(data_dir.glob("eis_*.csv"))
+    assert len(eis_files) >= 1

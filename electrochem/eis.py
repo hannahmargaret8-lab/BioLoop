@@ -406,7 +406,77 @@ class PalmSens:
             raise RuntimeError("PalmSens not connected")
 
         if self.simulate:
-            return self.simulate_scan()
+            # playback mode: use canned EIS files if available
+            Path("data").mkdir(exist_ok=True)
+            if self.simulate == 'playback' and self._playback is not None:
+                # advance playback and copy the underlying CSV into data/
+                rs = self._playback.next_rs()
+                src = self._playback.files[(self._playback.index - 1) % len(self._playback.files)]
+                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                csv_file = f"data/eis_{mode}_{sample_name}_{ts}.csv"
+                try:
+                    import shutil
+                    shutil.copy(src, csv_file)
+                except Exception:
+                    # fallback: write a minimal CSV
+                    freqs = np.array([1000, 100, 10, 1, 0.1])
+                    zr = np.full_like(freqs, rs, dtype=float)
+                    zi = -np.abs(np.random.normal(loc=5.0, scale=0.2, size=freqs.shape))
+                    df = pd.DataFrame({
+                        "freq_Hz": freqs,
+                        "Zreal_ohm": zr,
+                        "Zimag_ohm": zi,
+                        "timestamp": ts,
+                    })
+                    df.to_csv(csv_file, index=False)
+
+                latest_file = "data/eis_last_scan.csv"
+                try:
+                    import shutil
+                    shutil.copy(csv_file, latest_file)
+                except Exception:
+                    pass
+
+                plot_eis(latest_file)
+                return rs
+
+            # non-playback simulate: synthesize frequency sweep and CSV like a real run
+            rs = self.simulate_scan()
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            freqs = np.logspace(np.log10(min_frequency_hz), np.log10(max_frequency_hz), num=n_points)
+            zr = np.full_like(freqs, rs, dtype=float)
+            zi = -0.1 * np.sqrt(freqs) - 1.0
+
+            csv_file = f"data/eis_{mode}_{sample_name}_{ts}.csv"
+            latest_file = "data/eis_last_scan.csv"
+
+            df = pd.DataFrame({
+                "freq_Hz": freqs,
+                "Zreal_ohm": zr,
+                "Zimag_ohm": zi,
+                "timestamp": ts,
+                "mode": metadata.get("mode"),
+                "sample_name": metadata.get("sample_name"),
+                "known_I": known_I,
+                "predicted_I": predicted_I,
+                "scan_index": metadata.get("scan_index"),
+                "n_scans": metadata.get("n_scans"),
+
+                "measurement_mode": measurement_mode,
+                "dc_bias_V": dc_bias_v,
+                "ac_amplitude_V": ac_amplitude_v,
+                "max_frequency_Hz": max_frequency_hz,
+                "min_frequency_Hz": min_frequency_hz,
+                "requested_n_points": n_points,
+            })
+
+            df.to_csv(csv_file, index=False)
+            df.to_csv(latest_file, index=False)
+
+            plot_eis(latest_file)
+
+            print("Simulated EIS CSV and plots written to data/")
+            return rs
 
         print("Running real EIS scan")
         script = build_eis_script(

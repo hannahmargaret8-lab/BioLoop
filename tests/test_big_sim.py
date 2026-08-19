@@ -10,5 +10,6 @@ def test_big_sim_runs():
     # basic outputs should be created
     data_dir = Path("data")
     assert data_dir.exists()
-    assert any(data_dir.glob("eis_*.csv"))
-    assert (data_dir / "bioloop_log.csv").exists() or True
+    eis_files = list(data_dir.glob("eis_*.csv"))
+    assert len(eis_files) >= 1
+    assert (data_dir / "bioloop_log.csv").exists()
