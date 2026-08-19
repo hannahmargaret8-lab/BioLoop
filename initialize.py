@@ -49,6 +49,7 @@ def initialize_bioloop(simulate=False):
     # optional: load playback config into system so protocols can access canned files
     playback_cfg_path = Path("simulator/config.yaml")
     if playback_cfg_path.exists():
+        # Prefer PyYAML if available, but fall back to a simple parser if not installed.
         try:
             import yaml
 
@@ -58,7 +59,22 @@ def initialize_bioloop(simulate=False):
             else:
                 playback = None
         except Exception:
-            playback = None
+            # Simple fallback parser for a minimal YAML list under 'files:'
+            try:
+                lines = playback_cfg_path.read_text().splitlines()
+                files = []
+                in_files = False
+                for ln in lines:
+                    ln = ln.strip()
+                    if not in_files:
+                        if ln.startswith("files:"):
+                            in_files = True
+                        continue
+                    if ln.startswith("-"):
+                        files.append(ln.lstrip("- ").strip())
+                playback = files if files else None
+            except Exception:
+                playback = None
     else:
         playback = None
 
