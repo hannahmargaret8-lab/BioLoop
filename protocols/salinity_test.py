@@ -40,7 +40,11 @@ def run_salinity_demo(
         else:
             sample_name = "sample"
 
-    pot = PalmSens(simulate=simulate)
+    # support playback simulator: if simulate is 'playback' and a playback path is provided in system, use it
+    playback = None
+    if isinstance(simulate, str) and simulate == 'playback':
+        playback = system.get('playback') if isinstance(system, dict) else None
+    pot = PalmSens(simulate=simulate, playback=playback)
     pot.connect()
 
     run_metadata = {

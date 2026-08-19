@@ -46,6 +46,22 @@ def initialize_bioloop(simulate=False):
 
     print("Loaded Kcell:", Kcell)
 
+    # optional: load playback config into system so protocols can access canned files
+    playback_cfg_path = Path("simulator/config.yaml")
+    if playback_cfg_path.exists():
+        try:
+            import yaml
+
+            cfg = yaml.safe_load(playback_cfg_path.read_text())
+            if cfg and "files" in cfg:
+                playback = cfg["files"]
+            else:
+                playback = None
+        except Exception:
+            playback = None
+    else:
+        playback = None
+
     print(
         "Empirical model:",
         EMPIRICAL_MODEL,
@@ -68,4 +84,5 @@ def initialize_bioloop(simulate=False):
         "Kcell": Kcell,
         "empirical_model": EMPIRICAL_MODEL,
         "grounded_model": GROUNDED_MODEL,
+        "playback": playback,
     }

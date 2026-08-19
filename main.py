@@ -8,7 +8,7 @@ from protocols.salinity_test import run_salinity_demo
 def main():
     parser = argparse.ArgumentParser(description="Run BioLoop workflows")
     parser.add_argument("--simulate", action="store_true", help="Run in simulation mode (no hardware)")
-    parser.add_argument("--simulate-mode", choices=["random", "deterministic", "none"], default="none", help="Simulation mode behavior")
+    parser.add_argument("--simulate-mode", choices=["random", "deterministic", "playback", "none"], default="none", help="Simulation mode behavior")
     parser.add_argument("--mode", default="predict", help="Mode for salinity demo: known,predict,calibrate,kcell")
     parser.add_argument("--expected-i", type=float, default=None, help="Expected I for known/calibrate modes")
     parser.add_argument("--sample-name", default=None, help="Sample name for logging")
